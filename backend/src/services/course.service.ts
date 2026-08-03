@@ -22,8 +22,8 @@ export const getAllCourses = async () => {
     id: c.id,
     name: c.name,
     day: c.day,
-    startTime: c.start_time,
-    endTime: c.end_time,
+    startTime: formatTime(c.start_time),
+    endTime: formatTime(c.end_time),
     modality: c.modality,
     difficulty: c.difficulty,
     credits: c.credits,
@@ -47,8 +47,8 @@ export const getCourseById = async (id: number) => {
     id: course.id,
     name: course.name,
     day: course.day,
-    startTime: course.start_time,
-    endTime: course.end_time,
+    startTime: formatTime(course.start_time),
+    endTime: formatTime(course.end_time),
     modality: course.modality,
     difficulty: course.difficulty,
     credits: course.credits,
@@ -97,7 +97,7 @@ export const updateCourse = async (id: number, data: CourseInput) => {
     },
   });
 
-  // Actualizamos la tabla de prerrequisitos
+  // Actualizacion tabla de prerrequisitos
   await prisma.prerequisites.deleteMany({
     where: { course_id: id },
   });
@@ -121,4 +121,9 @@ export const deleteCourse = async (id: number) => {
   } catch {
     return false;
   }
+};
+
+const formatTime = (time: Date | string): string => {
+  if (typeof time === "string") return time;
+  return time.toISOString().substring(11, 16); // Extrae "08:00" de DateTime
 };

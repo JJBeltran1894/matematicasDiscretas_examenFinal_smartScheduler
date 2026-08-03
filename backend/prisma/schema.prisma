@@ -10,8 +10,8 @@ model courses {
   id                                                          Int             @id @default(autoincrement())
   name                                                        String          @db.VarChar(100)
   day                                                         String          @db.VarChar(20)
-  start_time                                                  DateTime        @db.Time(6)
-  end_time                                                    DateTime        @db.Time(6)
+  start_time                                                  DateTime        @db.Time
+  end_time                                                    DateTime        @db.Time
   modality                                                    String          @db.VarChar(20)
   difficulty                                                  String          @db.VarChar(20)
   credits                                                     Int
