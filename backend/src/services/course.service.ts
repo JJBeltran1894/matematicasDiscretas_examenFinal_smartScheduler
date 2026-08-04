@@ -3,15 +3,12 @@ import prisma from "../database/prisma.ts";
 export interface CourseInput {
   name: string;
   day: string;
-  start_time?: string;
-  end_time?: string;
-  startTime?: string;
-  endTime?: string;
+  startTime: string;
+  endTime: string;
   modality: string;
   difficulty: string;
   credits: number;
   prerequisites?: number[];
-  prerequisiteIds?: number[];
 }
 
 export const getAllCourses = async () => {
@@ -61,26 +58,21 @@ export const getCourseById = async (id: number) => {
   };
 };
 
-// Util: Parsea cadenas de hora (ej: "08:00") a un objeto Date
-const parseTimeToDate = (timeStr?: string): Date => {
+const parseTimeToDate = (timeStr: string): Date => {
   if (!timeStr) return new Date("1970-01-01T08:00:00.000Z");
   if (timeStr.includes("T")) return new Date(timeStr);
   return new Date(`1970-01-01T${timeStr}:00.000Z`);
 };
 
 export const createCourse = async (data: CourseInput) => {
-  const startTimeVal = parseTimeToDate(data.start_time || data.startTime);
-  const endTimeVal = parseTimeToDate(data.end_time || data.endTime);
-  const prereqIds = (data.prerequisites || data.prerequisiteIds || []).map(
-    Number,
-  );
+  const prereqIds = (data.prerequisites || []).map(Number);
 
   const newCourse = await prisma.courses.create({
     data: {
       name: data.name,
       day: data.day,
-      start_time: startTimeVal,
-      end_time: endTimeVal,
+      start_time: parseTimeToDate(data.startTime),
+      end_time: parseTimeToDate(data.endTime),
       modality: data.modality,
       difficulty: data.difficulty,
       credits: Number(data.credits),
@@ -100,26 +92,22 @@ export const createCourse = async (data: CourseInput) => {
 };
 
 export const updateCourse = async (id: number, data: CourseInput) => {
-  const startTimeVal = parseTimeToDate(data.start_time || data.startTime);
-  const endTimeVal = parseTimeToDate(data.end_time || data.endTime);
-  const prereqIds = (data.prerequisites || data.prerequisiteIds || []).map(
-    Number,
-  );
+  const prereqIds = (data.prerequisites || []).map(Number);
 
   await prisma.courses.update({
     where: { id: Number(id) },
     data: {
       name: data.name,
       day: data.day,
-      start_time: startTimeVal,
-      end_time: endTimeVal,
+      start_time: parseTimeToDate(data.startTime),
+      end_time: parseTimeToDate(data.endTime),
       modality: data.modality,
       difficulty: data.difficulty,
       credits: Number(data.credits),
     },
   });
 
-  // Actualizacion tabla de prerrequisitos
+  // Limpieza y actualización de la tabla intermedia de prerrequisitos
   await prisma.prerequisites.deleteMany({
     where: { course_id: Number(id) },
   });
@@ -140,14 +128,14 @@ export const deleteCourse = async (id: number) => {
   try {
     const courseId = Number(id);
 
-    // Elimina primero los vinculos en la tabla de prerrequisitos
+    // 1. Eliminar referencias cruzadas en la tabla de prerrequisitos
     await prisma.prerequisites.deleteMany({
       where: {
         OR: [{ course_id: courseId }, { prerequisite_course_id: courseId }],
       },
     });
 
-    // Elimina la materia de la tabla courses
+    // 2. Eliminar la materia
     await prisma.courses.delete({
       where: { id: courseId },
     });
@@ -159,7 +147,6 @@ export const deleteCourse = async (id: number) => {
   }
 };
 
-// Util: Parsea hora de time a String (ej: "08:00")
 const formatTime = (time: Date | string): string => {
   if (typeof time === "string") return time;
   return time.toISOString().substring(11, 16);
