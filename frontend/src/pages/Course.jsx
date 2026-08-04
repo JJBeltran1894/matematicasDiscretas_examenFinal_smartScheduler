@@ -6,9 +6,15 @@ export const CoursesPage = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 
+  // Estado para las notificaciones Toast
+  const [toast, setToast] = useState(null);
+
   // Estados para modal de Creación / Edición
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [editingCourse, setEditingCourse] = useState(null); // null = Crear, objeto = Editar
+  const [editingCourse, setEditingCourse] = useState(null);
+
+  // Estado para el Modal de Confirmación de Eliminación
+  const [courseToDelete, setCourseToDelete] = useState(null);
 
   const [formData, setFormData] = useState({
     name: "",
@@ -25,6 +31,13 @@ export const CoursesPage = () => {
     fetchCourses();
   }, []);
 
+  const showToast = (message, type) => {
+    setToast({ message, type });
+    setTimeout(() => {
+      setToast(null);
+    }, 3500);
+  };
+
   const fetchCourses = async () => {
     try {
       setLoading(true);
@@ -37,7 +50,6 @@ export const CoursesPage = () => {
     }
   };
 
-  // Abrir Modal para Crear
   const handleOpenCreateModal = () => {
     setEditingCourse(null);
     setFormData({
@@ -53,49 +65,100 @@ export const CoursesPage = () => {
     setIsModalOpen(true);
   };
 
-  // ✏️ Abrir Modal para EDITAR
   const handleOpenEditModal = (course) => {
     setEditingCourse(course);
+
+    const prereqIds = (
+      course.prerequisites ||
+      course.prerequisiteIds ||
+      []
+    ).map((p) => (typeof p === "object" ? Number(p.id) : Number(p)));
+
     setFormData({
-      name: course.name,
-      day: course.day,
+      name: course.name || "",
+      day: course.day || "Lunes",
       startTime:
         course.startTime || course.start_time?.substring(11, 16) || "08:00",
       endTime: course.endTime || course.end_time?.substring(11, 16) || "10:00",
-      modality: course.modality,
-      difficulty: course.difficulty,
-      credits: course.credits,
-      prerequisiteIds: course.prerequisites || course.prerequisiteIds || [],
+      modality: course.modality || "Presencial",
+      difficulty: course.difficulty || "Alta",
+      credits: Number(course.credits) || 3,
+      prerequisiteIds: prereqIds,
     });
     setIsModalOpen(true);
   };
 
-  // Guardar (POST o PUT)
+  const togglePrerequisite = (id) => {
+    const targetId = Number(id);
+    setFormData((prev) => {
+      const exists = prev.prerequisiteIds.some(
+        (pId) => Number(pId) === targetId,
+      );
+      return {
+        ...prev,
+        prerequisiteIds: exists
+          ? prev.prerequisiteIds.filter((pId) => Number(pId) !== targetId)
+          : [...prev.prerequisiteIds, targetId],
+      };
+    });
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     try {
+      const cleanPrereqs = formData.prerequisiteIds.map(Number);
+      const payload = {
+        ...formData,
+        credits: Number(formData.credits),
+        start_time: formData.startTime,
+        end_time: formData.endTime,
+        prerequisites: cleanPrereqs,
+        prerequisiteIds: cleanPrereqs,
+      };
+
       if (editingCourse) {
-        // PUT /courses/:id
-        await api.put(`/courses/${editingCourse.id}`, formData);
+        await api.put(`/courses/${editingCourse.id}`, payload);
+        showToast(
+          `✅ Materia "${formData.name}" actualizada con éxito`,
+          "edit",
+        );
       } else {
-        // POST /courses
-        await api.post("/courses", formData);
+        await api.post("/courses", payload);
+        showToast(`✨ Materia "${formData.name}" guardada con éxito`, "create");
       }
       setIsModalOpen(false);
       fetchCourses();
     } catch (err) {
-      alert("Error al guardar los cambios de la materia.");
+      console.error("Error al guardar materia:", err);
+      showToast(
+        err.response?.data?.message ||
+          "Error al guardar los cambios de la materia.",
+        "delete",
+      );
     }
   };
 
-  // Eliminar materia
-  const handleDelete = async (id) => {
-    if (!window.confirm("¿Estás seguro de eliminar esta materia?")) return;
+  // Solicitar confirmación con Modal Personalizado
+  const handleRequestDelete = (course) => {
+    setCourseToDelete(course);
+  };
+
+  // Ejecutar eliminación confirmada
+  const handleConfirmDelete = async () => {
+    if (!courseToDelete) return;
+    const { id, name } = courseToDelete;
+    setCourseToDelete(null);
+
     try {
-      await api.delete(`/courses/${id}`);
-      fetchCourses();
+      const res = await api.delete(`/courses/${id}`);
+      if (res.data) {
+        showToast(`🗑️ Materia "${name}" eliminada correctamente`, "delete");
+        fetchCourses();
+      } else {
+        showToast("Error al eliminar la materia.", "delete");
+      }
     } catch (err) {
-      alert("Error al eliminar la materia.");
+      showToast("Error al eliminar la materia.", "delete");
     }
   };
 
@@ -118,53 +181,65 @@ export const CoursesPage = () => {
         <p>Cargando materias...</p>
       ) : (
         <div className="courses-grid">
-          {courses.map((course) => (
-            <div key={course.id} className="course-card">
-              <div>
-                <div className="course-badges">
-                  <span
-                    className={`badge badge-${
-                      course.modality?.toLowerCase() || "presencial"
-                    }`}
+          {courses.map((course) => {
+            const prereqList = course.prerequisites || [];
+            return (
+              <div key={course.id} className="course-card">
+                <div>
+                  <div className="course-badges">
+                    <span
+                      className={`badge badge-${
+                        course.modality?.toLowerCase() || "presencial"
+                      }`}
+                    >
+                      {course.modality}
+                    </span>
+                    <span className="badge badge-credits">
+                      {course.credits} Créditos
+                    </span>
+                  </div>
+                  <h3 className="course-title">{course.name}</h3>
+                </div>
+
+                <div className="course-card-body">
+                  <div className="course-info-row">
+                    📅 <strong>{course.day}</strong>
+                  </div>
+                  <div className="course-info-row">
+                    ⏰{" "}
+                    {course.startTime || course.start_time?.substring(11, 16)} -{" "}
+                    {course.endTime || course.end_time?.substring(11, 16)}
+                  </div>
+                  <div className="course-info-row">
+                    🎯 Dificultad: <strong>{course.difficulty}</strong>
+                  </div>
+                  {prereqList.length > 0 && (
+                    <div
+                      className="course-info-row"
+                      style={{ fontSize: "0.8rem", color: "var(--neon-amber)" }}
+                    >
+                      📌 Prerrequisitos: {prereqList.length} materia(s)
+                    </div>
+                  )}
+                </div>
+
+                <div className="course-card-actions">
+                  <button
+                    className="btn-edit"
+                    onClick={() => handleOpenEditModal(course)}
                   >
-                    {course.modality}
-                  </span>
-                  <span className="badge badge-credits">
-                    {course.credits} Créditos
-                  </span>
-                </div>
-                <h3 className="course-title">{course.name}</h3>
-              </div>
-
-              <div className="course-card-body">
-                <div className="course-info-row">
-                  📅 <strong>{course.day}</strong>
-                </div>
-                <div className="course-info-row">
-                  ⏰ {course.startTime || course.start_time?.substring(11, 16)}{" "}
-                  - {course.endTime || course.end_time?.substring(11, 16)}
-                </div>
-                <div className="course-info-row">
-                  🎯 Dificultad: <strong>{course.difficulty}</strong>
+                    Editar
+                  </button>
+                  <button
+                    className="btn-delete"
+                    onClick={() => handleRequestDelete(course)}
+                  >
+                    Eliminar
+                  </button>
                 </div>
               </div>
-
-              <div className="course-card-actions">
-                <button
-                  className="btn-edit"
-                  onClick={() => handleOpenEditModal(course)}
-                >
-                  Editar
-                </button>
-                <button
-                  className="btn-delete"
-                  onClick={() => handleDelete(course.id)}
-                >
-                  Eliminar
-                </button>
-              </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
 
@@ -210,6 +285,7 @@ export const CoursesPage = () => {
                     <option value="Jueves">Jueves</option>
                     <option value="Viernes">Viernes</option>
                     <option value="Sábado">Sábado</option>
+                    <option value="Domingo">Domingo</option>
                   </select>
                 </div>
 
@@ -286,6 +362,37 @@ export const CoursesPage = () => {
                 </div>
               </div>
 
+              {/* Selector de Prerrequisitos */}
+              <div className="form-group">
+                <label>Prerrequisitos (Materias requeridas):</label>
+                <div className="prereq-checkbox-list">
+                  {courses
+                    .filter(
+                      (c) =>
+                        !editingCourse ||
+                        Number(c.id) !== Number(editingCourse.id),
+                    )
+                    .map((course) => {
+                      const isChecked = formData.prerequisiteIds.some(
+                        (pId) => Number(pId) === Number(course.id),
+                      );
+                      return (
+                        <label
+                          key={`prereq-${course.id}`}
+                          className="checkbox-item-modal"
+                        >
+                          <input
+                            type="checkbox"
+                            checked={isChecked}
+                            onChange={() => togglePrerequisite(course.id)}
+                          />
+                          <span>{course.name}</span>
+                        </label>
+                      );
+                    })}
+                </div>
+              </div>
+
               <div className="modal-actions">
                 <button
                   type="button"
@@ -300,6 +407,56 @@ export const CoursesPage = () => {
               </div>
             </form>
           </div>
+        </div>
+      )}
+
+      {/* MODAL PERSONALIZADO DE CONFIRMACIÓN DE ELIMINACIÓN */}
+      {courseToDelete && (
+        <div className="modal-overlay">
+          <div className="modal-content" style={{ maxWidth: "420px" }}>
+            <div className="modal-header">
+              <h3>🗑️ Confirmar Eliminación</h3>
+              <button
+                className="close-btn"
+                onClick={() => setCourseToDelete(null)}
+              >
+                ✖
+              </button>
+            </div>
+            <p style={{ color: "var(--text-secondary)", margin: "1rem 0" }}>
+              ¿Estás seguro de que deseas eliminar la materia{" "}
+              <strong style={{ color: "var(--text-primary)" }}>
+                "{courseToDelete.name}"
+              </strong>
+              ? Esta acción no se puede deshacer.
+            </p>
+            <div className="modal-actions">
+              <button
+                className="btn-cancel"
+                onClick={() => setCourseToDelete(null)}
+              >
+                Cancelar
+              </button>
+              <button
+                className="btn-delete"
+                style={{
+                  flex: "none",
+                  width: "auto",
+                  padding: "0.6rem 1.2rem",
+                }}
+                onClick={handleConfirmDelete}
+              >
+                Sí, Eliminar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MENSAJE FLOTANTE DE CONFIRMACIÓN (TOAST INFERIOR DERECHO) */}
+      {toast && (
+        <div className={`toast-notification toast-${toast.type}`}>
+          {toast.message}
         </div>
       )}
     </div>

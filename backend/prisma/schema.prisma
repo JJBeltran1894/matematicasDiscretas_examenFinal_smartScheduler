@@ -20,10 +20,10 @@ model courses {
 }
 
 model prerequisites {
-  course_id                                             Int
-  prerequisite_course_id                                Int
-  courses_prerequisites_course_idTocourses              courses @relation("prerequisites_course_idTocourses", fields: [course_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  courses_prerequisites_prerequisite_course_idTocourses courses @relation("prerequisites_prerequisite_course_idTocourses", fields: [prerequisite_course_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  course_id              Int
+  prerequisite_course_id Int
+  course               courses @relation("CourseToPrerequisite", fields: [course_id], references: [id], onDelete: Cascade)
+  prerequisite_course  courses @relation("PrerequisiteToCourse", fields: [prerequisite_course_id], references: [id], onDelete: Cascade)
 
   @@id([course_id, prerequisite_course_id])
 }
